@@ -1,0 +1,431 @@
+import React, { useEffect, useState } from "react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+import Select from "react-select";
+
+const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
+  const hour = Math.floor(i / 2);
+  const minute = i % 2 === 0 ? "00" : "30";
+  const formattedHour = hour.toString().padStart(2, "0");
+  return {
+    value: `${formattedHour}:${minute}`,
+    label: `${formattedHour}:${minute}`
+  };
+});
+
+const TIME_ZONES = [
+  { value: "GMT-12", label: "(GMT-12:00) International Date Line West" },
+  { value: "GMT-11", label: "(GMT-11:00) Midway Island, Samoa" },
+  { value: "GMT-10", label: "(GMT-10:00) Hawaii" },
+  { value: "GMT+5", label: "(GMT+05:00) Islamabad, Karachi" },
+  { value: "GMT+6", label: "(GMT+06:00) Dhaka" },
+  { value: "GMT+12", label: "(GMT+12:00) Fiji, Marshall Islands" }
+];
+
+const REPEAT_OPTIONS = [
+  { value: "never", label: "Never" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "custom", label: "Custom" }
+];
+
+const CreateEvent = () => {
+  const [eventData, setEventData] = useState({
+    startDate: new Date(),
+    startTime: null,
+    endDate: null,
+    endTime: null,
+    timeZone: null,
+    showEndDate: false,
+    repeatOption: REPEAT_OPTIONS[0],
+    selectedDates: []
+  });
+  console.log(eventData.startDate,'startDate')
+  console.log(eventData.startTime,'startTime')
+  console.log(eventData.endDate,'endDate')
+  console.log(eventData.endTime,'endTime')
+  console.log(eventData.timeZone,'timeZone')
+  console.log(eventData.showEndDate,'showEndDate')
+  console.log(eventData.repeatOption,'repeatOption')
+  console.log(eventData.selectedDates,'selectedDates')
+
+  const filterWeeklyDates = (date) => {
+    const startDay = eventData.startDate.getDay();
+    const selectedDay = date.getDay();
+    return selectedDay === startDay;
+  };
+  
+  const handleDateTimeChange = (field, value) => {
+    setEventData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleStartDateChange = (date) => {
+    const newState = { ...eventData, startDate: date };
+    if (eventData.endDate && date >= eventData.endDate) {
+      const nextDay = new Date(date);
+      nextDay.setDate(nextDay.getDate() + 1);
+      newState.endDate = nextDay;
+    }
+    setEventData(newState);
+  };
+
+  const handleToggleEndDate = () => {
+    const newState = { ...eventData, showEndDate: !eventData.showEndDate };
+    if (!eventData.showEndDate && !eventData.endDate) {
+      const nextDay = new Date(eventData.startDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      newState.endDate = nextDay;
+    }
+    setEventData(newState);
+  };
+
+  const handleCustomDateSelection = (date) => {
+    setEventData((prev) => {
+      const isSelected = prev.selectedDates.some((d) => d.date === date);
+  
+      if (isSelected) {
+        // If already selected, remove the date
+        return {
+          ...prev,
+          selectedDates: prev.selectedDates.filter((d) => d.date !== date),
+        };
+      } else {
+        // Add the new date with an empty times array
+        return {
+          ...prev,
+          selectedDates: [...prev.selectedDates, { date, times: [] }],
+        };
+      }
+    });
+  };
+  
+
+  const handleCustomTimeChange = (dateIndex, timeIndex, field, value) => {
+    setEventData(prev => {
+      const newSelectedDates = [...prev.selectedDates];
+      if (!newSelectedDates[dateIndex].times[timeIndex]) {
+        newSelectedDates[dateIndex].times[timeIndex] = {};
+      }
+      newSelectedDates[dateIndex].times[timeIndex][field] = value;
+      return {
+        ...prev,
+        selectedDates: newSelectedDates
+      };
+    });
+  };
+
+  const addTimeSlot = (dateIndex) => {
+    setEventData(prev => {
+      const newSelectedDates = [...prev.selectedDates];
+      if (newSelectedDates[dateIndex].times.length === 0) {
+        newSelectedDates[dateIndex].times.push({ start: null, end: null });
+      }
+      return {
+        ...prev,
+        selectedDates: newSelectedDates
+      };
+    });
+  };
+
+  const removeTimeSlot = (dateIndex, timeIndex) => {
+    setEventData(prev => {
+      const newSelectedDates = [...prev.selectedDates];
+      newSelectedDates[dateIndex].times = newSelectedDates[dateIndex].times.filter((_, i) => i !== timeIndex);
+      return {
+        ...prev,
+        selectedDates: newSelectedDates
+      };
+    });
+  };
+
+  const removeDateAndTime = (dateIndex) => {
+    // Remove the date from the selectedDates array
+    setEventData((prev) => {
+      const updatedDates = [...prev.selectedDates];
+      updatedDates.splice(dateIndex, 1);
+      return { ...prev, selectedDates: updatedDates };
+    });
+  };
+  
+
+  useEffect(() => {
+    const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    try {
+      const date = new Date();
+      const offset = -date.getTimezoneOffset();
+      const sign = offset >= 0 ? '+' : '-';
+      const hours = Math.abs(Math.floor(offset / 60));
+      const userTimeZoneGMT = `GMT${sign}${hours}`;
+      
+      const defaultTimeZone = TIME_ZONES.find(tz => tz.value === userTimeZoneGMT) || 
+        { value: userTimeZoneGMT, label: `(${userTimeZoneGMT}) ${userTimeZone}` };
+
+      setEventData(prev => ({
+        ...prev,
+        timeZone: defaultTimeZone
+      }));
+    } catch (error) {
+      console.error("Error setting timezone:", error);
+    }
+  }, []);
+
+  const renderCustomCalendar = () => (
+    <div className="w-1/3 pr-4 border-r overflow-y-auto h-[500px]">
+      <h3 className="text-lg font-medium mb-4">Year Calendar</h3>
+      <div className="grid grid-cols-1 gap-4">
+        {Array.from({ length: 12 }, (_, month) => {
+          const currentDate = new Date(2025, month);
+          const daysInMonth = new Date(2025, month + 1, 0).getDate();
+          const monthName = currentDate.toLocaleString("default", { month: "long" });
+
+          return (
+            <div key={month} className="mb-6">
+              <h4 className="font-medium mb-2">{monthName}</h4>
+              <div className="grid grid-cols-7 gap-1 text-sm">
+                {Array.from({ length: daysInMonth }, (_, day) => {
+                  const date = `2025-${String(month + 1).padStart(2, '0')}-${String(day + 1).padStart(2, '0')}`;
+                  const isSelected = eventData.selectedDates.some(d => d.date === date);
+
+                  return (
+                    <button
+                      key={day}
+                      className={`p-2 border rounded-md hover:bg-blue-100 ${
+                        isSelected ? "bg-blue-500 text-white" : ""
+                      }`}
+                      onClick={() => handleCustomDateSelection(date)}
+                    >
+                      {day + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex p-4 max-w-6xl mx-auto border rounded-md shadow-md">
+      {eventData.repeatOption?.value === "custom" && renderCustomCalendar()}
+
+      <div className={`${eventData.repeatOption?.value === "custom" ? "w-2/3" : "w-full"} pl-4`}>
+        <div className="flex space-x-4">
+          <div className="flex flex-col w-1/3">
+            <label className="font-medium text-gray-700 mb-1">Start Date</label>
+            <DatePicker
+              selected={eventData.startDate}
+              onChange={handleStartDateChange}
+              className="border rounded-md px-3 py-2 w-full focus:ring focus:ring-blue-500"
+              dateFormat="dd MMM yyyy"
+              minDate={new Date()}
+            />
+          </div>
+
+          <div className="flex flex-col w-1/3">
+            <label className="font-medium text-gray-700 mb-1">Start Time</label>
+            <Select
+              options={TIME_OPTIONS}
+              value={eventData.startTime}
+              onChange={value => handleDateTimeChange('startTime', value)}
+              className="w-full"
+              placeholder="Select time"
+            />
+          </div>
+
+          <div className="flex flex-col w-1/3">
+            <label className="font-medium text-gray-700 mb-1">Time Zone</label>
+            <Select
+              options={TIME_ZONES}
+              value={eventData.timeZone}
+              onChange={value => handleDateTimeChange('timeZone', value)}
+              className="w-full"
+              placeholder="Time zone"
+              isSearchable
+            />
+          </div>
+        </div>
+
+        {/* Conditional rendering and disabling the button */}
+        <button
+          className={`text-blue-500 font-medium mt-2 ${eventData.repeatOption !== REPEAT_OPTIONS[0] ? 'cursor-not-allowed opacity-50' : ''}`}
+          onClick={
+            eventData.repeatOption === REPEAT_OPTIONS[0] ? handleToggleEndDate : undefined
+          }
+          disabled={eventData.repeatOption !== REPEAT_OPTIONS[0]}
+        >
+          {eventData.showEndDate ? "- End date and time" : "+ End date and time"}
+        </button>
+
+        {eventData.showEndDate && eventData.repeatOption === REPEAT_OPTIONS[0] && (
+          <div className="flex space-x-4 mt-4">
+            <div className="flex flex-col w-1/3">
+              <label className="font-medium text-gray-700 mb-1">End Date</label>
+              <DatePicker
+                selected={eventData.endDate}
+                onChange={value => handleDateTimeChange('endDate', value)}
+                className="border rounded-md px-3 py-2 w-full focus:ring focus:ring-blue-500"
+                dateFormat="dd MMM yyyy"
+                minDate={eventData.startDate}
+              />
+            </div>
+
+            <div className="flex flex-col w-1/3">
+              <label className="font-medium text-gray-700 mb-1">End Time</label>
+              <Select
+                options={TIME_OPTIONS}
+                value={eventData.endTime}
+                onChange={value => handleDateTimeChange('endTime', value)}
+                className="w-full"
+                placeholder="Select time"
+              />
+            </div>
+
+            <div className="flex flex-col w-1/3">
+              <label className="font-medium text-gray-700 mb-1">Time Zone</label>
+              <Select
+                options={TIME_ZONES}
+                value={eventData.timeZone}
+                onChange={value => handleDateTimeChange('timeZone', value)}
+                className="w-full"
+                placeholder="Select time zone"
+              />
+            </div>
+          </div>
+        )}
+
+      <div className="mt-4">
+        <label className="font-medium text-gray-700 mb-1">Repeat</label>
+        <Select
+          options={REPEAT_OPTIONS}
+          value={eventData.repeatOption}
+          onChange={(value) => setEventData((prev) => ({ ...prev, repeatOption: value }))}
+          className="w-full"
+          placeholder="Select repeat option"
+        />
+      </div>
+
+        {eventData.repeatOption?.value === "custom" && eventData.selectedDates.length > 0 && (
+          <div className="mt-4">
+            <h3 className="text-lg font-medium mb-4">Selected Dates and Times</h3>
+            {eventData.selectedDates.map((selectedDate, dateIndex) => (
+              <div key={dateIndex} className="border p-4 rounded-md mb-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">Times for {selectedDate.date}</h4>
+                  <div className="flex items-center space-x-4">
+                    <button
+                      className="text-blue-500 font-medium"
+                      onClick={() => addTimeSlot(dateIndex)}
+                    >
+                      + Add Time
+                    </button>
+                    <button
+                      className="text-red-500 font-medium"
+                      onClick={() => removeDateAndTime(dateIndex)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-4">
+                  {selectedDate.times.map((time, timeIndex) => (
+                    <div key={timeIndex} className="flex items-center">
+                      <Select
+                        options={TIME_OPTIONS}
+                        value={time.start}
+                        onChange={(value) => handleCustomTimeChange(dateIndex, timeIndex, 'start', value)}
+                        className="w-1/2 mr-2"
+                        placeholder="Start time"
+                      />
+                      <Select
+                        options={TIME_OPTIONS}
+                        value={time.end}
+                        onChange={(value) => handleCustomTimeChange(dateIndex, timeIndex, 'end', value)}
+                        className="w-1/2"
+                        placeholder="End time"
+                      />
+                      <button
+                        className="text-red-500 font-medium ml-2"
+                        onClick={() => removeTimeSlot(dateIndex, timeIndex)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+                {/* Daily Repeat Option */}
+                {eventData.repeatOption?.value === "daily" && (
+          <div className="flex space-x-4 mt-4">
+            <div className="flex flex-col w-1/3">
+              <label className="font-medium text-gray-700 mb-1">End Date</label>
+              <DatePicker
+                selected={eventData.endDate || (() => {
+                  const nextDay = new Date(eventData.startDate);
+                  nextDay.setDate(nextDay.getDate() + 1);
+                  return nextDay;
+                })()}
+                onChange={value => handleDateTimeChange('endDate', value)}
+                className="border rounded-md px-3 py-2 w-full focus:ring focus:ring-blue-500"
+                dateFormat="dd MMM yyyy"
+                minDate={eventData.startDate}
+              />
+            </div>
+
+            <div className="flex flex-col w-1/3">
+              <label className="font-medium text-gray-700 mb-1">End Time</label>
+              <Select
+                options={TIME_OPTIONS}
+                value={eventData.endTime}
+                onChange={value => handleDateTimeChange('endTime', value)}
+                className="w-full"
+                placeholder="Select time"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Weekly Repeat Option */}
+        {eventData.repeatOption?.value === "weekly" && (
+          <div className="flex space-x-4 mt-4">
+            <div className="flex flex-col w-1/3">
+              <label className="font-medium text-gray-700 mb-1">End Date</label>
+              <DatePicker
+                selected={eventData.endDate || (() => {
+                  const nextWeek = new Date(eventData.startDate);
+                  nextWeek.setDate(nextWeek.getDate() + 7);
+                  return nextWeek;
+                })()}
+                onChange={value => handleDateTimeChange('endDate', value)}
+                className="border rounded-md px-3 py-2 w-full focus:ring focus:ring-blue-500"
+                dateFormat="dd MMM yyyy"
+                minDate={eventData.startDate}
+                filterDate={filterWeeklyDates}
+              />
+            </div>
+
+            <div className="flex flex-col w-1/3">
+              <label className="font-medium text-gray-700 mb-1">End Time</label>
+              <Select
+                options={TIME_OPTIONS}
+                value={eventData.endTime}
+                onChange={value => handleDateTimeChange('endTime', value)}
+                className="w-full"
+                placeholder="Select time"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default CreateEvent;
